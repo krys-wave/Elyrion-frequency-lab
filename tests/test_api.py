@@ -63,6 +63,25 @@ def test_completed_room_comparison_and_response_windows(tmp_path):
         assert comparison['status'] == 'ready'
         assert comparison['similarity'] < .8
         assert comparison['responses']['Room A']
+        assert set(comparison['fm']) == {'Room A', 'Room B'}
+        for room in ('Room A', 'Room B'):
+            archived = client.get('/api/runs/'+comparison['runs'][room]).json()
+            assert comparison['fm'][room] == archived['fm']
+            assert comparison['pa'][room]['identifier'] != comparison['runs'][room]
+            assert comparison['pi'][room]['qualifying_runs'] == 1
+
+
+def test_saved_room_b_status_is_complete_everywhere(tmp_path):
+    with TestClient(create_app(tmp_path)) as client:
+        run = client.post('/api/runs', json={"room": "Room B"}).json()
+        assert client.get('/api/runs').json()[0]['status'] == 'recording'
+        time.sleep(.15)
+        saved = client.post('/api/stop', json={}).json()
+        assert saved['status'] == 'complete'
+        assert client.get('/api/runs').json()[0]['status'] == 'complete'
+        assert client.get('/api/runs/'+run['id']).json()['run']['status'] == 'complete'
+    with TestClient(create_app(tmp_path)) as client:
+        assert client.get('/api/runs').json()[0]['status'] == 'complete'
 
 
 def test_hardware_mode_no_fallback_and_local_origin(tmp_path):

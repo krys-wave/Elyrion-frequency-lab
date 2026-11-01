@@ -5,11 +5,37 @@ import elyrionLogo from './assets/elyrion-logo.png';
 
 type Data = Record<string, any>;
 const events = ['Person entered','Person exited','Cat/dog entered','Cat/dog exited','Door opened','Door closed','HVAC started','HVAC stopped','Tone started','Tone stopped','Unknown event','Custom note'];
-async function api(path:string, body?:unknown) {
-  const r = await fetch('/api/'+path, body === undefined ? undefined : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+async function api(path:string, body?:unknown, signal?:AbortSignal) {
+  const r = await fetch('/api/'+path, body === undefined ? {signal} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});
   const data = await r.json(); if(!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)); return data;
 }
 function Json({value}:{value:unknown}) {return <pre>{JSON.stringify(value,null,2)}</pre>}
+const keyDefinitions = [
+  ['Sensor State', 'measured state of the room at that moment'],
+  ['FAP', 'Frequency · Amplitude · Phase'],
+  ['Relationship Map', 'relationships between measured signals'],
+  ['FM', 'Frequency Map'],
+  ['PI', 'Persistent Invariant; stable features across repeated runs'],
+  ['D', 'Dynamic State; current difference from the persistent baseline'],
+  ['PA', 'Pulse Address; normalized relational state representation'],
+  ['RFN', 'Response Function; change produced by a controlled input'],
+  ['ΔFM', 'difference between two Frequency Maps'],
+];
+function KeyLegend(){
+  return <details className="lab-key"><summary>Key / Legend</summary><dl>{keyDefinitions.map(([term,definition])=><React.Fragment key={term}><dt>{term}</dt><dd>{definition}</dd></React.Fragment>)}</dl></details>;
+}
+function RoomSummary({room,comparison}:{room:string,comparison:Data}){
+  const component=comparison.fm?.[room]?.components?.M_X;
+  const frequency=component?.status==='no oscillatory signal'?'No oscillatory signal':Number.isFinite(component?.frequency_hz)?`${component.frequency_hz.toFixed(3)} Hz`:'Insufficient data';
+  const pi=comparison.pi?.[room];
+  return <article className="panel room-summary" aria-label={`${room} summary`}><h2>{room}</h2><dl>
+    <dt>Run ID</dt><dd><code>{comparison.runs?.[room]??'Unavailable'}</code></dd>
+    <dt>PA ID</dt><dd><code>{comparison.pa?.[room]?.identifier??'Collecting data'}</code></dd>
+    <dt>Dominant frequency (M_X)</dt><dd className="gold">{frequency}</dd>
+    <dt>PI status</dt><dd>{pi?.status==='ready'?'Ready':pi?.status??'Insufficient runs for PI'}</dd>
+    <dt>Qualifying baseline count</dt><dd>{pi?.qualifying_runs??'Unavailable'}</dd>
+  </dl></article>;
+}
 function Trace({values,color='#66bfff'}:{values:number[],color?:string}) {
   if(values.length<2) return <div className="empty">Waiting for samples</div>;
   const lo=Math.min(...values), hi=Math.max(...values), span=hi-lo||1;
@@ -21,13 +47,50 @@ function Spectrogram({data}:{data:Data}) {
   return <canvas ref={ref} className="spectrogram" aria-label="Acoustic spectrogram; frequency rises vertically, time horizontally"/>;
 }
 function App(){
-  const [live,setLive]=useState<Data>({}),[history,setHistory]=useState<Data[]>([]),[room,setRoom]=useState('Room A'),[source,setSource]=useState('simulation'),[view,setView]=useState('live'),[error,setError]=useState(''),[message,setMessage]=useState(''),[runs,setRuns]=useState<Data[]>([]),[archive,setArchive]=useState<Data|null>(null),[comparison,setComparison]=useState<Data|null>(null),[kind,setKind]=useState(events[0]),[note,setNote]=useState(''),[port,setPort]=useState(''),[available,setAvailable]=useState<Data[]>([]),[socketConnected,setSocketConnected]=useState(false),[retention,setRetention]=useState('full'),[disturbance,setDisturbance]=useState(0);
+  const [live,setLive]=useState<Data>({}),[history,setHistory]=useState<Data[]>([]),[room,setRoom]=useState('Room A'),[source,setSource]=useState('simulation'),[view,setView]=useState('live'),[error,setError]=useState(''),[message,setMessage]=useState(''),[runs,setRuns]=useState<Data[]>([]),[archive,setArchive]=useState<Data|null>(null),[comparison,setComparison]=useState<Data|null>(null),[kind,setKind]=useState(events[0]),[note,setNote]=useState(''),[port,setPort]=useState(''),[available,setAvailable]=useState<Data[]>([]),[socketConnected,setSocketConnected]=useState(false),[retention,setRetention]=useState('full'),[disturbance,setDisturbance]=useState(0),[saving,setSaving]=useState(false);
   const [tone,setTone]=useState({kind:'single',frequency_hz:440,end_frequency_hz:880,amplitude:.05,duration_s:4,pre_s:4,post_s:4});
   const audio=useRef<AudioContext|null>(null), oscillator=useRef<OscillatorNode|null>(null), activeId=useRef<string|null>(null);
   useEffect(()=>{let ws:WebSocket;let timer:ReturnType<typeof setTimeout>;let closed=false;const connect=()=>{ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`);ws.onopen=()=>setSocketConnected(true);ws.onmessage=e=>{const d=JSON.parse(e.data);setLive(d);if(d.run?.id!==activeId.current){activeId.current=d.run?.id??null;setHistory([])}if(d.trace_window)setHistory(d.trace_window);if(!d.perturbation&&oscillator.current){try{oscillator.current.stop()}catch{}oscillator.current=null}};ws.onclose=()=>{setSocketConnected(false);if(!closed)timer=setTimeout(connect,1500)}};connect();api('ports').then(setAvailable).catch(e=>setError(e.message));return()=>{closed=true;clearTimeout(timer);ws?.close();audio.current?.close()}},[]);
+  const hasRecordingRuns=runs.some(run=>run.status==='recording');
+  // Refresh on run transitions; poll only while recording or reconnecting.
+  // Cancel earlier reads so a delayed recording response cannot replace a saved run.
+  useEffect(()=>{
+    if(view!=='archive')return;
+    const controller=new AbortController();let disposed=false,inFlight=false;
+    const refresh=async()=>{
+      if(inFlight)return;inFlight=true;
+      try{const data=await api('runs',undefined,controller.signal);if(!disposed)setRuns(data)}
+      catch(e){if(!disposed)setError((e as Error).message)}
+      finally{inFlight=false}
+    };
+    void refresh();const timer=(live.run?.id||hasRecordingRuns||!socketConnected)?setInterval(refresh,1000):undefined;
+    return()=>{disposed=true;clearInterval(timer);controller.abort()};
+  },[view,live.run?.id,hasRecordingRuns,socketConnected]);
+  const selectedRunStatus=runs.find(r=>r.id===archive?.run.id)?.status;
+  useEffect(()=>{
+    if(view!=='archive'||!archive||!selectedRunStatus||selectedRunStatus===archive.run.status)return;
+    const controller=new AbortController();let disposed=false;
+    api('runs/'+archive.run.id,undefined,controller.signal).then(data=>{if(!disposed)setArchive(data)}).catch(e=>{if(!disposed)setError(e.message)});
+    return()=>{disposed=true;controller.abort()};
+  },[view,archive?.run.id,archive?.run.status,selectedRunStatus]);
+  useEffect(()=>{
+    if(view!=='compare')return;
+    const controller=new AbortController();let disposed=false;setComparison(null);
+    api(`compare?source=${source}`,undefined,controller.signal).then(data=>{if(!disposed)setComparison(data)}).catch(e=>{if(!disposed)setError(e.message)});
+    return()=>{disposed=true;controller.abort()};
+  },[view,source,live.run?.id]);
   const act=async(fn:()=>Promise<unknown>)=>{setError('');try{await fn()}catch(e){setError((e as Error).message)}};
   const start=async(baseline:boolean)=>{await api('runs',{room,source,baseline,port:port||null,retention,disturbance});setView('live');setHistory([]);setMessage('Run started. Record at least 8 seconds for a qualifying baseline.')};
   const stopAudio=()=>{if(oscillator.current){try{oscillator.current.stop()}catch{}oscillator.current=null}};
+  const stop=async()=>{
+    setSaving(true);stopAudio();
+    try{
+      const saved=await api('stop',{});
+      setRuns(old=>old.some(r=>r.id===saved.id)?old.map(r=>r.id===saved.id?saved:r):[saved,...old]);
+      setLive(old=>old.run?.id===saved.id?{...old,run:null}:old);
+      setMessage('Run saved locally. Open the archive to inspect measurements and analysis.');
+    }finally{setSaving(false)}
+  };
   const perturb=async()=>{
     // Browser audio activation must happen within this click gesture.
     if(!audio.current)audio.current=new AudioContext();await audio.current.resume();
@@ -38,15 +101,16 @@ function App(){
   const traces=archive&&view==='archive'?archive.frames.slice(-200):history;
   const elapsed=live.run?Math.max(0,Math.round((Date.now()-Date.parse(live.run.started_at))/1000)):0;
   return <main><header><div className="brand"><img className="brand-logo" src={elyrionLogo} alt="Elyrion logo" width="60" height="60"/><div>ELYRION <span>FREQUENCY LAB</span><small>LOCAL SCIENTIFIC WORKSPACE / V0.1</small></div></div><div className="status"><i className={live.connected?'on':''}/>{live.connected?'ACQUIRING':'IDLE'} · {socketConnected?'GATEWAY ONLINE':'GATEWAY DISCONNECTED'}<small>Sensor Node 01 · {live.run?.source??source} · {live.run?.room??room} · {elapsed}s</small></div></header>
-  <nav>{['live','compare','archive'].map(v=><button className={view===v?'selected':''} key={v} onClick={()=>act(async()=>{setView(v);setArchive(null);if(v==='archive')setRuns(await api('runs'));if(v==='compare')setComparison(await api(`compare?source=${source}`))})}>{v==='live'?'Frequency observatory':v==='compare'?'Room A ↔ Room B':'Run archive'}</button>)}</nav>
-  <section className="toolbar"><label>Location<select disabled={!!live.run} value={room} onChange={e=>setRoom(e.target.value)}><option>Room A</option><option>Room B</option></select></label><label>Input<select disabled={!!live.run} value={source} onChange={e=>setSource(e.target.value)}><option value="simulation">Simulation · synthetic</option><option value="serial">USB serial · measured</option></select></label>{source==='serial'&&<label>Port<select value={port} onChange={e=>setPort(e.target.value)}><option value="">Select device</option>{available.map(p=><option key={p.port}>{p.port}</option>)}</select></label>}<label>Storage<select disabled={!!live.run} value={retention} onChange={e=>setRetention(e.target.value)}><option value="full">Full-resolution</option><option value="summarized">Summarized windows</option></select></label><label>Simulated disturbance<input type="number" disabled={!!live.run||source!=='simulation'} min="0" max="20" step=".1" value={disturbance} onChange={e=>setDisturbance(Number(e.target.value))}/></label><button disabled={!!live.run} onClick={()=>act(()=>start(true))}>New Baseline Run</button><button disabled={!!live.run} onClick={()=>act(()=>start(false))}>Start</button><button disabled={!live.run} onClick={()=>act(async()=>{stopAudio();await api('stop',{});setMessage('Run saved locally. Open the archive to inspect measurements and analysis.')})}>Stop & save</button></section>
+  <nav>{['live','compare','archive'].map(v=><button className={view===v?'selected':''} key={v} onClick={()=>{setView(v);setArchive(null)}}>{v==='live'?'Frequency observatory':v==='compare'?'Room A ↔ Room B':'Run archive'}</button>)}</nav>
+  <section className="toolbar"><label>Location<select disabled={!!live.run} value={room} onChange={e=>setRoom(e.target.value)}><option>Room A</option><option>Room B</option></select></label><label>Input<select disabled={!!live.run} value={source} onChange={e=>setSource(e.target.value)}><option value="simulation">Simulation · synthetic</option><option value="serial">USB serial · measured</option></select></label>{source==='serial'&&<label>Port<select value={port} onChange={e=>setPort(e.target.value)}><option value="">Select device</option>{available.map(p=><option key={p.port}>{p.port}</option>)}</select></label>}<label>Storage<select disabled={!!live.run} value={retention} onChange={e=>setRetention(e.target.value)}><option value="full">Full-resolution</option><option value="summarized">Summarized windows</option></select></label><label>Simulated disturbance<input type="number" disabled={!!live.run||source!=='simulation'} min="0" max="20" step=".1" value={disturbance} onChange={e=>setDisturbance(Number(e.target.value))}/></label><button disabled={!!live.run} onClick={()=>act(()=>start(true))}>New Baseline Run</button><button disabled={!!live.run} onClick={()=>act(()=>start(false))}>Start</button><button disabled={!live.run||saving} onClick={()=>act(stop)}>{saving?'Saving…':'Stop & save'}</button></section>
   <div className="notice">{(live.run?.source??source)==='simulation'?'SIMULATED DATA · seeded test signals, not environmental measurements':'HARDWARE MODE · uncalibrated channels must not be interpreted as calibrated measurements'} <span>Blue: input signals · Gold: derived descriptors</span></div>
   {error&&<div role="alert" className="error">{error}</div>}{live.error&&<div role="alert" className="error">Acquisition: {live.error}</div>}{message&&<p role="status" className="message">{message}</p>}
   <div className="runid">RUN {live.run?.id??'—'} · All data stays on this machine · Comparison target: {live.comparison_target??'awaiting baseline'}</div>
-  {view==='compare'?<section className="panel"><h1>ROOM A ↔ ROOM B</h1><p>Latest completed runs in {source} mode. Comparison uses fixed engineering scales.</p>{comparison?.status==='ready'?<><div className="big gold">{(comparison.similarity*100).toFixed(1)}% <small>similarity</small></div><h3>Dominant distinguishing features</h3><p>{comparison.dominant_features.join(' · ')}</p><details open><summary>FM · PI · PA · response comparisons</summary><Json value={comparison}/></details></>:<p>{comparison?.status??'Loading'}</p>}</section>:<>
+  <KeyLegend/>
+  {view==='compare'?<section className="panel"><h1>ROOM A ↔ ROOM B</h1><p>Latest completed runs in {source} mode. Comparison uses fixed engineering scales.</p>{comparison?.status==='ready'?<><div className="room-summaries">{['Room A','Room B'].map(room=><RoomSummary key={room} room={room} comparison={comparison}/>)}</div><h2>Frequency Map comparison (ΔFM)</h2><div className="big gold">{(comparison.similarity*100).toFixed(1)}% <small>similarity</small></div><h3>Dominant distinguishing features</h3><p>{comparison.dominant_features.join(' · ')}</p><details open><summary>Raw Analysis / Machine Representation</summary><p>FM · PI · PA · response comparisons</p><Json value={comparison}/></details></>:<p>{comparison?.status??'Loading'}</p>}</section>:<>
   {view==='archive'&&<section className="panel"><h1>Run archive</h1>{runs.length===0&&<p>No recorded runs yet.</p>}<div className="runlist">{runs.map(r=><button key={r.id} onClick={()=>act(async()=>setArchive(await api('runs/'+r.id)))}>{r.room} · {r.source} · {r.status}<small>{r.started_at} · {r.id.slice(0,8)}</small></button>)}</div>{archive&&<><h3>{archive.run.room} / {archive.run.id}</h3><details><summary>Events, response functions, metadata, raw measurements</summary><Json value={archive}/></details></>}</section>}
   <div className="cards">{[['Frequency Map',fm?.status??'Collecting baseline'],['Persistent Invariant',(archive?.pi??live.pi)?.status??'Insufficient runs for PI'],['Dynamic State',pa?.dynamic?'Relative to PI available':'Requires qualifying PI'],['Pulse Address',pa?.status??'PA preliminary'],['Similarity to Baseline',view==='archive'?'See recorded state':live.baseline?.similarity!=null?`${(live.baseline.similarity*100).toFixed(1)}%`:live.baseline?.status??'Collecting baseline'],['Anomaly Score',view==='archive'?'See recorded state':live.baseline?.anomaly_score?.toFixed(3)??'Requires baseline'],['Response Function',live.post_window_pending?'Collecting post-window':(archive?.responses?.at(-1)??live.response)?.status??'No perturbation recorded'],['Comparison Target',view==='archive'?archive?.run?.room??'Select run':live.comparison_target?.slice(0,8)??'Requires baseline']].map(([title,value])=><section className="panel metric" key={title}><h2>{title}</h2><div className="gold">{value}</div></section>)}</div>
-  <div className="grid"><section className="panel"><h2>Sensor state / live traces</h2><div className="channels">{['M_X','M_Y','M_Z','A_X','A_Y','A_Z','G_X','G_Y','G_Z','Temp','H','Pressure'].map(c=><div key={c}><h3>{c} <span>{traces.at(-1)?.values[c]?.toPrecision(5)??'—'} {live.units?.[c]}</span></h3><Trace values={traces.map((f:Data)=>f.values[c])}/></div>)}</div></section><section className="panel"><h2>Acoustic field</h2><p>Digital RMS: {fm?.acoustic?.rms?.toFixed(5)??'—'} · Not calibrated dB SPL</p><Trace values={traces.map((f:Data)=>f.acoustic_rms??Math.sqrt(f.acoustic_samples.reduce((s:number,v:number)=>s+v*v,0)/f.acoustic_samples.length))}/><h3>Power spectral density / 0–{(live.latest?.acoustic_sampling_rate??8000)/2000} kHz</h3><Trace color="#d9b971" values={fm?.acoustic?.psd?.map((v:number)=>10*Math.log10(Math.max(v,1e-12)))??[]}/><h3>Spectrogram</h3>{fm?.acoustic?.spectrogram?<Spectrogram data={fm.acoustic.spectrogram}/>:<p>Collecting acoustic window</p>}<details><summary>Frequency Map / relationships / Pulse Address</summary><Json value={{fm,pa,pi:archive?.pi??live.pi,response:archive?.responses??live.response}}/></details></section></div>
+  <div className="grid"><section className="panel"><h2>Sensor State / live traces</h2><div className="channels">{['M_X','M_Y','M_Z','A_X','A_Y','A_Z','G_X','G_Y','G_Z','Temp','H','Pressure'].map(c=><div key={c}><h3>{c} <span>{traces.at(-1)?.values[c]?.toPrecision(5)??'—'} {live.units?.[c]}</span></h3><Trace values={traces.map((f:Data)=>f.values[c])}/></div>)}</div></section><section className="panel"><h2>Acoustic field</h2><p>Digital RMS: {fm?.acoustic?.rms?.toFixed(5)??'—'} · Not calibrated dB SPL</p><Trace values={traces.map((f:Data)=>f.acoustic_rms??Math.sqrt(f.acoustic_samples.reduce((s:number,v:number)=>s+v*v,0)/f.acoustic_samples.length))}/><h3>Power spectral density / 0–{(live.latest?.acoustic_sampling_rate??8000)/2000} kHz</h3><Trace color="#d9b971" values={fm?.acoustic?.psd?.map((v:number)=>10*Math.log10(Math.max(v,1e-12)))??[]}/><h3>Spectrogram</h3>{fm?.acoustic?.spectrogram?<Spectrogram data={fm.acoustic.spectrogram}/>:<p>Collecting acoustic window</p>}<details><summary>Frequency Map / Relationship Map / FAP / Pulse Address</summary><Json value={{fm,pa,pi:archive?.pi??live.pi,response:archive?.responses??live.response}}/></details></section></div>
   {view==='live'&&<div className="grid"><section className="panel"><h2>Event marker</h2><label>Event<select value={kind} onChange={e=>setKind(e.target.value)}>{events.map(e=><option key={e}>{e}</option>)}</select></label><label>Notes<textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Observation, context, or custom note"/></label><button disabled={!live.run} onClick={()=>act(async()=>{const e=await api('events',{kind,note});setMessage(`${kind} recorded at ${e.timestamp}`);setNote('')})}>Mark event</button><button disabled={!live.run} onClick={()=>act(async()=>{await api(`raw/${!live.manual_raw}`,{});setMessage(live.manual_raw?'Manual raw retention stopped':'Manual raw retention started')})}>{live.manual_raw?'Stop raw interval':'Retain raw interval'}</button></section><section className="panel"><h2>Acoustic perturbation</h2><p>Browser audio → laptop output → wired speaker. Start at low volume. Simulation injects a synthetic tone as well.</p><label>Waveform<select value={tone.kind} onChange={e=>setTone({...tone,kind:e.target.value})}>{['single','stepped','linear','logarithmic'].map(k=><option key={k}>{k}</option>)}</select></label><div className="tonefields">{Object.entries(tone).filter(([k])=>k!=='kind').map(([k,v])=><label key={k}>{k.replaceAll('_',' ')}<input type="number" step="any" value={v} onChange={e=>setTone({...tone,[k]:Number(e.target.value)})}/></label>)}</div><button disabled={!live.run||!!live.perturbation||live.post_window_pending} onClick={()=>act(perturb)}>Start Acoustic Perturbation</button><button disabled={!live.perturbation} onClick={()=>act(async()=>{stopAudio();await api('perturbations/stop',{})})}>Stop Acoustic Perturbation</button><p className="gold">{live.perturbation?'Tone active · recording response':live.post_window_pending?'Collecting post-window · keep run active':'Pre/during/post windows are stored with the run.'}</p></section></div>}
   </>}
   <footer>ELYRION / FREQUENCY LAB · Offline by design · Measurement → Relationship → Mapping</footer></main>

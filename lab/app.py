@@ -294,7 +294,7 @@ def create_app(root=None):
         if not all(selected.values()): return {"status": "Record and stop a qualifying run in each room"}
         a, b = selected.values()
         pa, pb = lab().pi("Room A", source), lab().pi("Room B", source)
-        return {**compare(a["fm"], b["fm"]), "runs": {r: v["id"] for r, v in selected.items()}, "pi": {"Room A": pa, "Room B": pb}, "pa": {"Room A": state(a["fm"], pa), "Room B": state(b["fm"], pb)}, "responses": {"Room A": lab().store.records("responses", a["id"]), "Room B": lab().store.records("responses", b["id"])}}
+        return {**compare(a["fm"], b["fm"]), "runs": {r: v["id"] for r, v in selected.items()}, "fm": {r: v["fm"] for r, v in selected.items()}, "pi": {"Room A": pa, "Room B": pb}, "pa": {"Room A": state(a["fm"], pa), "Room B": state(b["fm"], pb)}, "responses": {"Room A": lab().store.records("responses", a["id"]), "Room B": lab().store.records("responses", b["id"])}}
 
     @app.websocket("/ws")
     async def live(ws: WebSocket):
