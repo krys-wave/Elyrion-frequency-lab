@@ -1,4 +1,4 @@
-"""Deterministic, versioned exploratory descriptors; no physical identity claims."""
+"""Deterministic, versioned signal analysis and relational state descriptors."""
 import hashlib
 import json
 import numpy as np
@@ -75,7 +75,7 @@ def persistent_invariant(maps):
         return {"status": "Insufficient runs for PI", "qualifying_runs": len(qualifying)}
     vectors = np.array([m["feature_vector"] for m in qualifying])
     spread = float(np.mean(np.std(vectors / FEATURE_SCALES, axis=0)))
-    return {"status": "ready", "method": "median-0.1", "feature_vector": np.median(vectors, axis=0).tolist(), "confidence": float(1 / (1 + spread)), "confidence_definition": "heuristic repeatability, not statistical confidence", "qualifying_runs": len(qualifying), "environmental_conditions": [m["sensor_state"] for m in qualifying]}
+    return {"status": "ready", "method": "median-0.1", "feature_vector": np.median(vectors, axis=0).tolist(), "confidence": float(1 / (1 + spread)), "confidence_definition": "heuristic repeatability score", "qualifying_runs": len(qualifying), "environmental_conditions": [m["sensor_state"] for m in qualifying]}
 
 
 def state(fm, pi):

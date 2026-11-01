@@ -1,6 +1,6 @@
 # ELYRION FREQUENCY LAB / V0.1
 
-A standalone, offline sensor-acquisition and exploratory signal-analysis lab. This checkout has no connections to Elyrion/WAV production, W.I., Auth, Founder Presence, Airwallex, Otharis, Supabase, or Netlify. No accounts, cloud database, production secrets, telemetry, or CDN assets are needed.
+A standalone, offline sensor-acquisition and signal-analysis lab. This checkout has no connections to Elyrion/WAV production, W.I., Auth, Founder Presence, Airwallex, Otharis, Supabase, or Netlify. No accounts, cloud database, production secrets, telemetry, or CDN assets are needed.
 
 ## Start here
 
@@ -19,7 +19,7 @@ Windows: `python -m venv .venv`, `.venv\Scripts\python -m pip install -r require
 ## First experiment
 
 1. Select **Simulation · synthetic**, **Room A**, and **Full-resolution** storage.
-2. Click **New Baseline Run**. Wait at least 8 seconds, then **Stop & save**. Repeat three qualifying baseline runs in the same room and input mode to produce the experimental PI descriptor.
+2. Click **New Baseline Run**. Wait at least 8 seconds, then **Stop & save**. Repeat three qualifying baseline runs in the same room and input mode to produce the PI descriptor.
 3. Record Room B. Choose **Room A ↔ Room B** to compare the most recent completed qualifying run in each room. Hardware and simulated runs are never mixed for comparison or PI.
 4. On another run, wait at least the configured pre-window (default 4 seconds), then **Start Acoustic Perturbation**. Keep recording for the tone duration **and** post-window. Defaults: 4 + 4 + 4 seconds. Shortened/incomplete windows are explicitly marked insufficient.
 5. Add event markers or custom notes. **Run archive** reopens measurements, traces, timestamps, FM/PI/D/PA descriptors, summaries, and response records after application restarts.
