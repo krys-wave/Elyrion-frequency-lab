@@ -1,0 +1,87 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "device_id": {
+      "minLength": 1,
+      "title": "Device Id",
+      "type": "string"
+    },
+    "firmware_version": {
+      "minLength": 1,
+      "title": "Firmware Version",
+      "type": "string"
+    },
+    "sampling_rate": {
+      "exclusiveMinimum": 0,
+      "maximum": 20000,
+      "title": "Sampling Rate",
+      "type": "number"
+    },
+    "acoustic_sampling_rate": {
+      "exclusiveMinimum": 0,
+      "maximum": 192000,
+      "title": "Acoustic Sampling Rate",
+      "type": "integer"
+    },
+    "calibration": {
+      "additionalProperties": true,
+      "title": "Calibration",
+      "type": "object"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "location_id": {
+      "enum": [
+        "Room A",
+        "Room B"
+      ],
+      "title": "Location Id",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "simulation",
+        "serial"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "values": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Values",
+      "type": "object"
+    },
+    "acoustic_samples": {
+      "items": {
+        "type": "number"
+      },
+      "maxItems": 8192,
+      "minItems": 1,
+      "title": "Acoustic Samples",
+      "type": "array"
+    }
+  },
+  "required": [
+    "timestamp",
+    "device_id",
+    "firmware_version",
+    "sampling_rate",
+    "acoustic_sampling_rate",
+    "run_id",
+    "location_id",
+    "source",
+    "values",
+    "acoustic_samples"
+  ],
+  "title": "Frame",
+  "type": "object"
+}
