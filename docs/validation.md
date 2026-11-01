@@ -1,5 +1,27 @@
 # Current-instance validation
 
+## Monterey-compatible local setup milestone
+
+The current lockfile targets **Python 3.12.x / Node 22.x** and macOS 12+, including the user's Monterey 12.7.6. Cloud execution uses Python 3.12.14, Node 22.23.4, and npm 10.9.9.
+
+| Current check | Result |
+| --- | --- |
+| Python test suite with the revised lockfile | **17 passed** in 10.28 seconds; includes five runtime-version guard cases |
+| Full installation / Node 22 TypeScript + Vite build | Passed |
+| Clean installation without `.venv` or `node_modules`, in a path containing spaces | Passed |
+| Repeat installation in that clean copy | Passed; existing `data/` file preserved |
+| Dependency consistency (`pip check`) | Passed |
+| Complete lockfile binary-only download for CPython 3.12 / macOS 12 / arm64 | **35 wheels downloaded** |
+| Complete lockfile binary-only download for CPython 3.12 / macOS 12 / x86_64 | **35 wheels downloaded** |
+| Existing browser smoke workflow with the revised backend | Passed: live simulation, start/stop, events, acoustic response, room comparison and archive reopening |
+| Browser errors / external requests | None / none |
+| Duplicate server startup | Rejected with an actionable port-8765 message |
+| Full process restart using `scripts/start.sh` | Both completed runs retained; archived FM reopened with status ready |
+
+The current Python tests emit one upstream Starlette typing-alias deprecation warning from the installed AnyIO version. The suite completes successfully. The unchanged signal engine, schema, serial gateway, acquisition code and existing UI controls are exercised with the new pins. This cloud host runs Linux: Mac wheels and Node's declared deployment targets were verified, but native execution on the Mac remains the local acceptance step in [macos.md](macos.md).
+
+## Original cloud validation record
+
 Validated on Linux with Python 3.12.14, Node.js 24.19.0, npm 11.9.0, and the pinned dependency files. These results describe this prepared machine; a fresh published environment has not been independently restored and tested.
 
 | Check | Result |

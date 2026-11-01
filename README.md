@@ -4,7 +4,9 @@ A standalone, offline sensor-acquisition and signal-analysis lab. This checkout 
 
 ## Start here
 
-Prerequisites: Python 3.12+, Node.js 22+ with npm. Internet access is needed **once** to install packages. The built application then operates offline.
+**MacBook Air on macOS Monterey 12.7.6:** follow the [Mac setup guide](docs/macos.md) for the official installers, exact launch commands, and simulator walkthrough.
+
+Supported toolchain: **Python 3.12.x** and **Node.js 22.x LTS** with npm. The scientific dependencies are pinned to prebuilt wheels compatible with Monterey on both Intel and Apple Silicon. Internet access is needed during setup; the built application then operates offline.
 
 ```sh
 cd /workspace/Elyrion-frequency-lab # or your local checkout
@@ -12,7 +14,7 @@ bash scripts/install.sh
 bash scripts/start.sh
 ```
 
-On your own laptop, open `http://127.0.0.1:8765`. The cloud onboarding environment is used for internal validation; it does not provide a dashboard preview. Use one server process; do not enable multiple Uvicorn workers against the same DuckDB file.
+On your own laptop, open `http://127.0.0.1:8765`. The cloud onboarding environment is used for internal validation; it does not provide a dashboard preview. On a Mac, the included **Setup Frequency Lab.command** and **Start Frequency Lab.command** launch the same setup/startup scripts from Finder. Use one server process; do not enable multiple Uvicorn workers against the same DuckDB file.
 
 Windows: `python -m venv .venv`, `.venv\Scripts\python -m pip install -r requirements.lock`, `.venv\Scripts\python -m pip install --no-deps -e .`, then run `npm ci` and `npm run build` in `ui`. From the repository root, run `.venv\Scripts\python -m uvicorn lab.app:app --host 127.0.0.1 --port 8765`. Windows has not been validated in this cloud task.
 
@@ -57,7 +59,10 @@ ui/src/                    dashboard, event/tone controls, comparison, archive
 tests/                     numerical, API, persistence and serial contract tests
 scripts/                   reproducible install and loopback startup
 docs/                      scientific methods, hardware status and UI captures
-requirements.lock          pinned Python package versions
+requirements.lock          pinned Monterey-compatible Python package versions
+requirements-compat.txt    native wheel compatibility constraints
+requirements-bootstrap.lock pinned installer/build tooling
+.python-version / .nvmrc   Python 3.12 / Node 22 reference versions
 ui/package-lock.json       pinned frontend dependency tree
 data/                      generated locally; ignored by Git
   database/lab.duckdb       runs, frames, events, summaries and responses
@@ -77,7 +82,7 @@ For longer baselines select **Summarized windows**. Five-second FM summaries are
 cd ui && npm run build
 ```
 
-Python tests cover FFT frequency/amplitude/phase, PSD, phase/coherence, deterministic repeatability, numerical room discrimination, PI prerequisites, synthetic acoustic response, incomplete/timing-invalid data, finite schemas, REST/WebSocket lifecycle, event timestamps, restart persistence, Parquet/WAV export, serial schema transport, and local-origin checks. See [validation](docs/validation.md) for results from this environment.
+Python tests cover runtime-version guards, FFT frequency/amplitude/phase, PSD, phase/coherence, deterministic repeatability, numerical room discrimination, PI prerequisites, synthetic acoustic response, incomplete/timing-invalid data, finite schemas, REST/WebSocket lifecycle, event timestamps, restart persistence, Parquet/WAV export, serial schema transport, and local-origin checks. See [validation](docs/validation.md) for results from this environment.
 
 The compiled UI is served by FastAPI. After editing TypeScript, run `npm run build` and refresh. Backend development may use `.venv/bin/python -m uvicorn lab.app:app --host 127.0.0.1 --port 8765 --reload`. Reload closes and saves the active run; do not use it while collecting an experiment. Dependencies are not fetched at runtime.
 

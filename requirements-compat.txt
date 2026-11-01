@@ -1,0 +1,8 @@
+# Native dependencies with CPython 3.12 wheels for macOS Monterey on both CPUs.
+# Compile requirements.lock from pyproject.toml with these constraints.
+pydantic==2.11.4
+httptools==0.6.4
+uvloop==0.21.0
+watchfiles==1.0.5
+PyYAML==6.0.2
+websockets==15.0.1

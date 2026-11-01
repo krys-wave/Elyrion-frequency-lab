@@ -1,0 +1,4 @@
+# Reproducible pip/editable-build tooling; used only during installation.
+pip==25.1.1
+setuptools==80.9.0
+wheel==0.45.1

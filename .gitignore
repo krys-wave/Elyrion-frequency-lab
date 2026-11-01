@@ -7,3 +7,5 @@ data/
 *.egg-info/
 *.tsbuildinfo
 firmware/sensor-node-01/.pio/
+.tools/
+.cache/
